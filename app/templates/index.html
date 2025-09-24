@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Student Score Predictor — Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 28px; color: #222; }
+    .container { max-width: 820px; margin: 0 auto; }
+    h1 { margin-bottom: 6px; }
+    form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+    label { font-size: 13px; display:block; margin-bottom:4px; color: #333; }
+    input, select { padding: 8px 10px; font-size: 14px; width:100%; box-sizing: border-box; }
+    .full { grid-column: 1 / -1; }
+    button { padding: 10px 14px; font-size: 15px; background:#0B66C3; color:white; border:none; border-radius:6px; cursor:pointer; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    .result { margin-top: 18px; padding: 12px; border-radius:8px; background:#f3f6fb; }
+    .small { font-size: 12px; color:#666; margin-top:6px; }
+    .row { display:flex; gap:10px; }
+    .col { flex:1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Student Score Predictor — Demo</h1>
+    <div class="small">Fill some fields (others will be imputed). Click <strong>Predict</strong>.</div>
+
+    <form id="predictForm">
+      <!-- We'll include a small, useful subset of features; missing ones are imputed -->
+      <div>
+        <label for="age">Age</label>
+        <input id="age" name="age" type="number" min="10" max="30" step="1" value="17"/>
+      </div>
+
+      <div>
+        <label for="sex">Sex</label>
+        <select id="sex" name="sex">
+          <option value="">(leave blank)</option>
+          <option value="F">F</option>
+          <option value="M">M</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="studytime">Study time (1-4)</label>
+        <input id="studytime" name="studytime" type="number" min="1" max="4" step="1" value="2"/>
+      </div>
+
+      <div>
+        <label for="failures">Past failures</label>
+        <input id="failures" name="failures" type="number" min="0" max="10" step="1" value="0"/>
+      </div>
+
+      <div>
+        <label for="G1">G1 (first period grade)</label>
+        <input id="G1" name="G1" type="number" min="0" max="20" step="1" value="10"/>
+      </div>
+
+      <div>
+        <label for="G2">G2 (second period grade)</label>
+        <input id="G2" name="G2" type="number" min="0" max="20" step="1" value="11"/>
+      </div>
+
+      <div>
+        <label for="activities">Has extracurricular activities</label>
+        <select id="activities" name="activities">
+          <option value="">(leave blank)</option>
+          <option value="yes">yes</option>
+          <option value="no">no</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="paid">Takes extra paid classes?</label>
+        <select id="paid" name="paid">
+          <option value="">(leave blank)</option>
+          <option value="yes">yes</option>
+          <option value="no">no</option>
+        </select>
+      </div>
+
+      <div class="full">
+        <label for="extra_info">Optional: paste JSON for any other raw features (e.g. {"famsize":"GT3","Pstatus":"T"})</label>
+        <input id="extra_info" name="extra_info" placeholder='{"famsize":"GT3","Pstatus":"T"}' />
+        <div class="small">Use this to send additional raw fields not present above. They must use original column names.</div>
+      </div>
+
+      <div class="full row">
+        <div class="col"><button id="predictBtn" type="button">Predict</button></div>
+        <div class="col" style="align-self:center;">
+          <div id="status" class="small">Ready</div>
+        </div>
+      </div>
+    </form>
+
+    <div id="resultBox" class="result" style="display:none;">
+      <div><strong>Predicted final score (G3):</strong> <span id="predVal"></span></div>
+      <div class="small" id="predExtra"></div>
+    </div>
+  </div>
+
+<script>
+document.getElementById("predictBtn").addEventListener("click", async function(){
+  const btn = this;
+  btn.disabled = true;
+  document.getElementById("status").innerText = "Predicting...";
+  document.getElementById("resultBox").style.display = "none";
+
+  // collect form inputs
+  const features = {};
+  ["age","sex","studytime","failures","G1","G2","activities","paid"].forEach(k=>{
+    const v = document.getElementById(k).value;
+    if (v !== "") {
+      // convert numeric fields to numbers
+      if (["age","studytime","failures","G1","G2"].includes(k)) {
+        features[k] = Number(v);
+      } else {
+        features[k] = v;
+      }
+    }
+  });
+
+  // parse optional JSON input for other fields
+  const extraText = document.getElementById("extra_info").value.trim();
+  if (extraText) {
+    try {
+      const extraObj = JSON.parse(extraText);
+      Object.assign(features, extraObj);
+    } catch(e){
+      document.getElementById("status").innerText = "Invalid JSON in optional field.";
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  try {
+    const res = await fetch("/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ features })
+    });
+    const json = await res.json();
+    if (res.ok) {
+      document.getElementById("predVal").innerText = Number(json.predicted_score).toFixed(3);
+      document.getElementById("predExtra").innerText = "";
+      document.getElementById("resultBox").style.display = "block";
+      document.getElementById("status").innerText = "Done";
+    } else {
+      document.getElementById("status").innerText = "Error: " + (json.error || res.statusText);
+      document.getElementById("predExtra").innerText = json.traceback ? json.traceback.split("\\n").slice(0,3).join("\\n") : "";
+      document.getElementById("resultBox").style.display = "block";
+    }
+  } catch (err) {
+    document.getElementById("status").innerText = "Network error";
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+
+</body>
+</html>

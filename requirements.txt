@@ -1,0 +1,13 @@
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+jupyterlab
+torch
+torchvision
+shap
+flask
+joblib
+pickle5
+mlflow
